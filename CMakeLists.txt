@@ -85,7 +85,7 @@
 # FreeType explicitly marks the API to be exported and relies on the compiler
 # to hide all other symbols. CMake supports a C_VISBILITY_PRESET property
 # starting with 2.8.12.
-cmake_minimum_required(VERSION 2.8.12)
+cmake_minimum_required(VERSION 3.16)
 
 if (NOT CMAKE_VERSION VERSION_LESS 3.3)
   # Allow symbol visibility settings also on static libraries. CMake < 3.3
@@ -131,7 +131,7 @@ else ()
 endif ()
 
 
-project(freetype C)
+project(freetype VERSION 2.10.1 LANGUAGES C)
 
 set(VERSION_MAJOR "2")
 set(VERSION_MINOR "10")
@@ -335,7 +335,9 @@ set(BASE_SRCS
 if (WIN32)
   enable_language(RC)
   list(APPEND BASE_SRCS builds/windows/ftdebug.c
-                        src/base/ftver.rc)
+                        src/base/ftver.rc
+                        src/base/win32_compat.c
+                        )
 elseif (WINCE)
   list(APPEND BASE_SRCS builds/wince/ftdebug.c)
 else ()
@@ -361,7 +363,25 @@ add_library(freetype
 
 set_target_properties(
   freetype PROPERTIES
-    C_VISIBILITY_PRESET hidden)
+    C_VISIBILITY_PRESET hidden
+    COMPILE_PDB_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}
+    COMPILE_PDB_NAME freetype
+    COMPILE_PDB_NAME_DEBUG freetyped
+    PDB_NAME freetype
+    PDB_NAME_DEBUG freetyped
+)
+
+target_compile_options(freetype
+  PRIVATE
+    /MP
+    /sdl-
+)
+
+target_link_options(freetype
+  PRIVATE
+    /INCREMENTAL:NO
+    /debug:full
+)
 
 target_compile_definitions(
   freetype PRIVATE FT2_BUILD_LIBRARY)
@@ -385,7 +405,7 @@ endif ()
 target_include_directories(
   freetype
     PUBLIC
-      $<INSTALL_INTERFACE:include/freetype2>
+      $<INSTALL_INTERFACE:include>
       $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
       $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     PRIVATE
@@ -438,7 +458,7 @@ if (NOT SKIP_INSTALL_HEADERS AND NOT SKIP_INSTALL_ALL)
   install(
     # Note the trailing slash in the argument to `DIRECTORY'!
     DIRECTORY ${PROJECT_SOURCE_DIR}/include/
-      DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/freetype2
+      DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
       COMPONENT headers
       PATTERN "internal" EXCLUDE
       PATTERN "ftconfig.h" EXCLUDE
@@ -446,7 +466,7 @@ if (NOT SKIP_INSTALL_HEADERS AND NOT SKIP_INSTALL_ALL)
   install(
     FILES ${PROJECT_BINARY_DIR}/include/freetype/config/ftconfig.h
           ${PROJECT_BINARY_DIR}/include/freetype/config/ftoption.h
-      DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/freetype2/freetype/config
+      DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/freetype/config
       COMPONENT headers)
 endif ()
 
@@ -487,20 +507,48 @@ if (NOT SKIP_INSTALL_LIBRARIES AND NOT SKIP_INSTALL_ALL)
       DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig
       COMPONENT pkgconfig)
   endif ()
-
+  include(CMakePackageConfigHelpers)
+  write_basic_package_version_file(
+    ${CMAKE_CURRENT_BINARY_DIR}/freetype-config-version.cmake
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY AnyNewerVersion
+  )
   install(
     TARGETS freetype
-      EXPORT freetype-targets
+      EXPORT freetype
       LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
       ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
       RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
       FRAMEWORK DESTINATION Library/Frameworks
       COMPONENT libraries)
   install(
-    EXPORT freetype-targets
+    EXPORT freetype
       DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/freetype
-      FILE freetype-config.cmake
       COMPONENT headers)
+
+  install(FILES
+    cmake/freetype-config.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/freetype-config-version.cmake
+    DESTINATION lib/cmake/freetype)
+
+  install(
+    FILES ${PROJECT_BINARY_DIR}/RelWithDebInfo/freetype.pdb
+    DESTINATION lib
+    CONFIGURATIONS RelWithDebInfo
+  )
+  install(
+    FILES ${PROJECT_BINARY_DIR}/Debug/freetyped.pdb
+    DESTINATION lib
+    CONFIGURATIONS Debug
+  )
+  install(EXPORT ${PROJECT_NAME}
+  FILE
+    ${PROJECT_NAME}.cmake
+  NAMESPACE
+    ${PROJECT_NAME}::
+  DESTINATION
+    lib/cmake/${PROJECT_NAME}
+)
 endif ()
 
 
